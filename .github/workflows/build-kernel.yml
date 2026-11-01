@@ -69,6 +69,7 @@ jobs:
       - name: Assemble source tree
         run: |
           set -euo pipefail
+          ROOT="$PWD"
           cp -a modules/source/vendor ./vendor
           rm -rf modules
           mkdir -p android
@@ -83,18 +84,17 @@ jobs:
           cp -a helper/fs/sdcardfs kernel/fs/osdcardfs
           rm -rf helper
 
-          cd kernel
-          ln -sfn ../../oplus/kernel/oplus_performance/gloom/resmap_account.h fs/proc/resmap_account.h
-          ln -sfn ../vendor/oplus/kernel/oplus_performance/vm_anti_fragment/vm_anti_fragment.c mm/vm_anti_fragment1.c
+          ln -sfn ../../vendor/oplus/kernel/oplus_performance/gloom/resmap_account.h "$ROOT/kernel/fs/proc/resmap_account.h"
+          ln -sfn ../../vendor/oplus/kernel/oplus_performance/vm_anti_fragment/vm_anti_fragment.c "$ROOT/kernel/mm/vm_anti_fragment1.c"
+
+          SECCOM="$ROOT/vendor/oplus/secure/common/bsp/drivers/oppo_secure_common/oppo_secure_common.c"
+          if [ -f "$SECCOM" ]; then
+            sed -i 's/^#if CONFIG_OPPO_BSP_SECCOM_PLATFORM == 6763/#if 1 || CONFIG_OPPO_BSP_SECCOM_PLATFORM == 6763/' "$SECCOM"
+            grep -n 'CONFIG_OPPO_BSP_SECCOM_PLATFORM' "$SECCOM" | head -3
+          fi
 
           echo "---- dangling symlinks ----"
-          find . -xtype l | sort || true
-
-          SECCOM=vendor/oplus/secure/common/bsp/drivers/oppo_secure_common/oppo_secure_common.c
-          if [ -f "$SECCOM" ]; then
-            sed -i 's/#if CONFIG_OPPO_BSP_SECCOM_PLATFORM == 6763/#if 1 || CONFIG_OPPO_BSP_SECCOM_PLATFORM == 6763/' "$SECCOM"
-            grep -n 'CONFIG_OPPO_BSP_SECCOM_PLATFORM' "$SECCOM" | head -5
-          fi
+          find "$ROOT/kernel" -xtype l | sort || true
 
       - name: Install host dependencies
         run: |
