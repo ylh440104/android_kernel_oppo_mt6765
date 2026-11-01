@@ -100,6 +100,20 @@ jobs:
           echo "---- dangling symlinks ----"
           find "$ROOT/kernel" -xtype l | sort || true
 
+      - name: Add weak stubs for optional OPPO symbols
+        run: |
+          set -euo pipefail
+          {
+            echo '#include <linux/kernel.h>'
+            echo ''
+            echo '__attribute__((weak)) void update_user_tasklist(void *tsk) { }'
+            echo '__attribute__((weak)) int is_reclaim_should_cancel(void *walk) { return 0; }'
+            echo '__attribute__((weak)) void oppo_init_sensor_state(void *state) { }'
+          } > kernel/kernel/oplus_build_stubs.c
+          echo 'obj-y += oplus_build_stubs.o' >> kernel/kernel/Makefile
+          cat kernel/kernel/oplus_build_stubs.c
+          tail -2 kernel/kernel/Makefile
+
       - name: Install host dependencies
         run: |
           set -euo pipefail
