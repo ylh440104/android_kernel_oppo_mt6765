@@ -79,6 +79,7 @@ jobs:
 
           rm -rf kernel/fs/exfat kernel/fs/osdcardfs kernel/fs/sdcardfs
           cp -a helper/fs/exfat kernel/fs/exfat
+          cp -a helper/fs/sdcardfs kernel/fs/sdcardfs
           cp -a helper/fs/sdcardfs kernel/fs/osdcardfs
           rm -rf helper
 
@@ -88,8 +89,8 @@ jobs:
 
           echo "---- dangling symlinks ----"
           find . -xtype l | sort || true
-          echo "---- fs module dirs ----"
-          ls -d fs/exfat fs/osdcardfs fs/of2fs fs/oext4
+          echo "---- fs module Kconfigs ----"
+          ls -l fs/exfat/Kconfig fs/sdcardfs/Kconfig fs/osdcardfs/Kconfig
 
       - name: Install host dependencies
         run: |
