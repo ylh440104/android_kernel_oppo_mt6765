@@ -74,16 +74,12 @@ jobs:
           mkdir -p android
           ln -sfn ../vendor android/vendor
 
-          if [ ! -f helper/fs/exfat/Kconfig ]; then
-            echo "helper repo has no fs/exfat/Kconfig" >&2
-            exit 1
-          fi
+          test -f helper/fs/exfat/Kconfig
+          test -f helper/fs/sdcardfs/Makefile
 
-          rm -rf kernel/fs/exfat kernel/fs/sdcardfs
+          rm -rf kernel/fs/exfat kernel/fs/osdcardfs kernel/fs/sdcardfs
           cp -a helper/fs/exfat kernel/fs/exfat
-          if [ -d helper/fs/sdcardfs ]; then
-            cp -a helper/fs/sdcardfs kernel/fs/sdcardfs
-          fi
+          cp -a helper/fs/sdcardfs kernel/fs/osdcardfs
           rm -rf helper
 
           cd kernel
@@ -92,6 +88,8 @@ jobs:
 
           echo "---- dangling symlinks ----"
           find . -xtype l | sort || true
+          echo "---- fs module dirs ----"
+          ls -d fs/exfat fs/osdcardfs fs/of2fs fs/oext4
 
       - name: Install host dependencies
         run: |
