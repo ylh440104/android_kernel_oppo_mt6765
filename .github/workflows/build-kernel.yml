@@ -11,6 +11,10 @@ on:
         description: 'OPPO kernel modules repo branch'
         required: true
         default: 'oppo/mt6765_r_11.1.4_a16'
+      extra_kernel_repo:
+        description: 'helper kernel repo donating fs/exfat + fs/sdcardfs'
+        required: true
+        default: 'oppo-source/android_kernel_oppo_mt6779'
   push:
     branches:
       - 'oppo/**'
@@ -55,22 +59,38 @@ jobs:
           fetch-depth: 1
           path: modules
 
-      - name: Place vendor tree
+      - name: Checkout helper kernel for fs modules
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.inputs.extra_kernel_repo || 'oppo-source/android_kernel_oppo_mt6779' }}
+          fetch-depth: 1
+          path: helper
+
+      - name: Assemble source tree
         run: |
           set -euo pipefail
-          test -d modules/source/vendor
           cp -a modules/source/vendor ./vendor
           rm -rf modules
           mkdir -p android
           ln -sfn ../vendor android/vendor
 
+          if [ ! -f helper/fs/exfat/Kconfig ]; then
+            echo "helper repo has no fs/exfat/Kconfig" >&2
+            exit 1
+          fi
+
+          rm -rf kernel/fs/exfat kernel/fs/sdcardfs
+          cp -a helper/fs/exfat kernel/fs/exfat
+          if [ -d helper/fs/sdcardfs ]; then
+            cp -a helper/fs/sdcardfs kernel/fs/sdcardfs
+          fi
+          rm -rf helper
+
           cd kernel
-          ln -sfn ../../oplus/kernel_4.19/exfat fs/exfat
-          ln -sfn ../../oplus/kernel_4.19/sdcardfs fs/osdcardfs
           ln -sfn ../../oplus/kernel/oplus_performance/gloom/resmap_account.h fs/proc/resmap_account.h
           ln -sfn ../vendor/oplus/kernel/oplus_performance/vm_anti_fragment/vm_anti_fragment.c mm/vm_anti_fragment1.c
 
-          echo "---- remaining dangling symlinks ----"
+          echo "---- dangling symlinks ----"
           find . -xtype l | sort || true
 
       - name: Install host dependencies
@@ -131,7 +151,7 @@ jobs:
           DEFCONFIG="${{ github.event.inputs.defconfig }}"
           if [ -z "$DEFCONFIG" ]; then DEFCONFIG="oppo6765_defconfig"; fi
           make O=out $MAKE_ARGS "$DEFCONFIG"
-          grep -E '^CONFIG_(BUILD_ARM64|MTK_PLATFORM|ARCH_MTK_PROJECT)' out/.config || true
+          grep -E '^CONFIG_(BUILD_ARM64|MTK_PLATFORM|ARCH_MTK_PROJECT|EXFAT)' out/.config || true
 
       - name: Build kernel image
         working-directory: kernel
