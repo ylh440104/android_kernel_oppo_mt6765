@@ -7,6 +7,10 @@ on:
         description: 'defconfig name'
         required: true
         default: 'oppo6765_defconfig'
+      modules_ref:
+        description: 'OPPO kernel modules repo branch'
+        required: true
+        default: 'oppo/mt6765_r_11.1.4_a16'
   push:
     branches:
       - 'oppo/**'
@@ -17,16 +21,50 @@ concurrency:
   group: build-kernel-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  MAKE_ARGS: >-
+    ARCH=arm64
+    CC=clang
+    LD=ld.lld
+    NM=llvm-nm
+    OBJCOPY=llvm-objcopy
+    OBJDUMP=llvm-objdump
+    STRIP=llvm-strip
+    AR=llvm-ar
+    CLANG_TRIPLE=aarch64-linux-gnu-
+    CROSS_COMPILE=aarch64-linux-androidkernel-
+    CROSS_COMPILE_ARM32=arm-linux-androideabi-
+
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 240
+    timeout-minutes: 300
 
     steps:
-      - name: Checkout source
+      - name: Checkout kernel source
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          path: kernel
+
+      - name: Checkout OPPO vendor modules
+        uses: actions/checkout@v4
+        with:
+          repository: oppo-source/android_kernel_modules_oppo_mt6765
+          ref: ${{ github.event.inputs.modules_ref || 'oppo/mt6765_r_11.1.4_a16' }}
+          fetch-depth: 1
+          path: modules
+
+      - name: Link vendor tree
+        run: |
+          set -euo pipefail
+          test -d modules/source/vendor
+          mkdir -p kernel/vendor
+          cp -a modules/source/vendor/. kernel/vendor/
+          rm -rf modules
+          echo "vendor entries: $(ls kernel/vendor)"
+          echo "---- dangling symlinks (first 30) ----"
+          find kernel -xtype l -maxdepth 6 2>/dev/null | head -30 || true
 
       - name: Install host dependencies
         run: |
@@ -75,67 +113,51 @@ jobs:
           set -euo pipefail
           clang --version
           ld.lld --version
-          aarch64-linux-androidkernel-elfedit --version | head -1
           aarch64-linux-gnu-as --version | head -1
           aarch64-linux-gnu-ld --version | head -1
           arm-linux-androideabi-as --version | head -1
 
       - name: Configure kernel
+        working-directory: kernel
         run: |
           set -euo pipefail
           DEFCONFIG="${{ github.event.inputs.defconfig }}"
           if [ -z "$DEFCONFIG" ]; then DEFCONFIG="oppo6765_defconfig"; fi
-          echo "DEFCONFIG=$DEFCONFIG" >> "$GITHUB_ENV"
-          make O=out ARCH=arm64 \
-            CC=clang LD=ld.lld NM=llvm-nm OBJCOPY=llvm-objcopy \
-            OBJDUMP=llvm-objdump STRIP=llvm-strip AR=llvm-ar \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-androidkernel- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-            "$DEFCONFIG"
-          grep -E '^CONFIG_(LOCALVERSION|MODULE_SIG|BUILD_ARM64|MTK_PLATFORM|ARCH_MTK_PROJECT|CC_IS)' out/.config || true
-
-      - name: Build device trees
-        run: |
-          set -euo pipefail
-          make O=out ARCH=arm64 \
-            CC=clang LD=ld.lld NM=llvm-nm OBJCOPY=llvm-objcopy \
-            OBJDUMP=llvm-objdump STRIP=llvm-strip AR=llvm-ar \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-androidkernel- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-            -j"$(nproc)" dtbs
-          find out/arch/arm64/boot/dts -name '*.dtb' | sort
+          make O=out $MAKE_ARGS "$DEFCONFIG"
+          grep -E '^CONFIG_(BUILD_ARM64|MTK_PLATFORM|ARCH_MTK_PROJECT)' out/.config || true
 
       - name: Build kernel image
+        working-directory: kernel
         run: |
           set -euo pipefail
-          make O=out ARCH=arm64 \
-            CC=clang LD=ld.lld NM=llvm-nm OBJCOPY=llvm-objcopy \
-            OBJDUMP=llvm-objdump STRIP=llvm-strip AR=llvm-ar \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-androidkernel- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-            -j"$(nproc)" Image.gz
+          make O=out $MAKE_ARGS -j"$(nproc)" Image.gz
           ls -lh out/arch/arm64/boot/Image.gz out/arch/arm64/boot/Image
 
-      - name: Show kernel version
+      - name: Build device trees
+        working-directory: kernel
         run: |
           set -euo pipefail
-          cat out/include/config/kernel.release || true
+          make O=out $MAKE_ARGS -j"$(nproc)" dtbs
+          find out/arch/arm64/boot/dts -name '*.dtb' | sort | head -40
+
+      - name: Show kernel release
+        working-directory: kernel
+        run: cat out/include/config/kernel.release || true
 
       - name: Package artifacts
+        working-directory: kernel
         run: |
           set -euo pipefail
-          mkdir -p dist
-          cp out/arch/arm64/boot/Image.gz dist/Image.gz
-          cp out/arch/arm64/boot/Image dist/Image || true
-          cp out/.config dist/kernel.config || true
-          cat out/include/config/kernel.release > dist/kernel.release 2>/dev/null || true
-          find out/arch/arm64/boot/dts -name '*.dtb' -exec cp {} dist/ \;
-          ls -lh dist
+          mkdir -p ../dist
+          cp out/arch/arm64/boot/Image.gz ../dist/Image.gz
+          cp out/arch/arm64/boot/Image ../dist/Image
+          cp out/.config ../dist/kernel.config
+          cp out/include/config/kernel.release ../dist/kernel.release
+          find out/arch/arm64/boot/dts -name '*.dtb' -exec cp {} ../dist/ \;
+          find out/arch/arm64/boot/dts -name '*.dtbo' -exec cp {} ../dist/ \; || true
+          ls -lh ../dist
 
-      - name: Upload artifacts
+      - name: Upload kernel artifacts
         uses: actions/upload-artifact@v4
         with:
           name: kernel-mt6765-${{ github.run_number }}
@@ -146,5 +168,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vmlinux-mt6765-${{ github.run_number }}
-          path: out/vmlinux
+          path: kernel/out/vmlinux
           if-no-files-found: warn
