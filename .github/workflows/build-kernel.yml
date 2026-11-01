@@ -59,14 +59,19 @@ jobs:
         run: |
           set -euo pipefail
           test -d modules/source/vendor
-          mkdir -p vendor android
-          cp -a modules/source/vendor/. vendor/
+          cp -a modules/source/vendor ./vendor
           rm -rf modules
+          mkdir -p android
           ln -sfn ../vendor android/vendor
-          echo "vendor: $(ls vendor)"
-          echo "oplus:  $(ls vendor/oplus)"
+
+          cd kernel
+          ln -sfn ../../oplus/kernel_4.19/exfat fs/exfat
+          ln -sfn ../../oplus/kernel_4.19/sdcardfs fs/osdcardfs
+          ln -sfn ../../oplus/kernel/oplus_performance/gloom/resmap_account.h fs/proc/resmap_account.h
+          ln -sfn ../vendor/oplus/kernel/oplus_performance/vm_anti_fragment/vm_anti_fragment.c mm/vm_anti_fragment1.c
+
           echo "---- remaining dangling symlinks ----"
-          find kernel -xtype l 2>/dev/null | sort || true
+          find . -xtype l | sort || true
 
       - name: Install host dependencies
         run: |
