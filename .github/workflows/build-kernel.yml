@@ -7,6 +7,10 @@ on:
         description: 'defconfig name'
         required: true
         default: 'oppo6765_defconfig'
+      target_product:
+        description: 'TARGET_PRODUCT for OPPO vendor Makefiles'
+        required: true
+        default: 'oppo6765'
       modules_ref:
         description: 'OPPO kernel modules repo branch'
         required: true
@@ -87,11 +91,9 @@ jobs:
           ln -sfn ../../vendor/oplus/kernel/oplus_performance/gloom/resmap_account.h "$ROOT/kernel/fs/proc/resmap_account.h"
           ln -sfn ../../vendor/oplus/kernel/oplus_performance/vm_anti_fragment/vm_anti_fragment.c "$ROOT/kernel/mm/vm_anti_fragment1.c"
 
-          SECCOM="$ROOT/vendor/oplus/secure/common/bsp/drivers/oppo_secure_common/oppo_secure_common.c"
-          if [ -f "$SECCOM" ]; then
-            sed -i 's/^#if CONFIG_OPPO_BSP_SECCOM_PLATFORM == 6763/#if 1 || CONFIG_OPPO_BSP_SECCOM_PLATFORM == 6763/' "$SECCOM"
-            grep -n 'CONFIG_OPPO_BSP_SECCOM_PLATFORM' "$SECCOM" | head -3
-          fi
+          SECCOM_DIR="$ROOT/vendor/oplus/secure/common/bsp/drivers/oppo_secure_common"
+          sed -i 's|^obj-y     +=  oppo_secure_common.o|ccflags-y += -I$(srctree)/drivers/misc/mediatek/masp/asfv2/asf_inc\nccflags-y += -I$(srctree)/drivers/misc/mediatek/masp/asfv2/asf_export_inc\nccflags-y += -I$(srctree)/drivers/misc/mediatek/masp/asfv2/module\nobj-y     +=  oppo_secure_common.o|' "$SECCOM_DIR/Makefile"
+          tail -8 "$SECCOM_DIR/Makefile"
 
           echo "---- dangling symlinks ----"
           find "$ROOT/kernel" -xtype l | sort || true
@@ -153,21 +155,21 @@ jobs:
           set -euo pipefail
           DEFCONFIG="${{ github.event.inputs.defconfig }}"
           if [ -z "$DEFCONFIG" ]; then DEFCONFIG="oppo6765_defconfig"; fi
-          make O=out $MAKE_ARGS "$DEFCONFIG"
+          make O=out $MAKE_ARGS TARGET_PRODUCT="${{ github.event.inputs.target_product || 'oppo6765' }}" "$DEFCONFIG"
           grep -E '^CONFIG_(BUILD_ARM64|MTK_PLATFORM|ARCH_MTK_PROJECT|EXFAT)' out/.config || true
 
       - name: Build kernel image
         working-directory: kernel
         run: |
           set -euo pipefail
-          make O=out $MAKE_ARGS -j"$(nproc)" Image.gz
+          make O=out $MAKE_ARGS TARGET_PRODUCT="${{ github.event.inputs.target_product || 'oppo6765' }}" -j"$(nproc)" Image.gz
           ls -lh out/arch/arm64/boot/Image.gz out/arch/arm64/boot/Image
 
       - name: Build device trees
         working-directory: kernel
         run: |
           set -euo pipefail
-          make O=out $MAKE_ARGS -j"$(nproc)" dtbs
+          make O=out $MAKE_ARGS TARGET_PRODUCT="${{ github.event.inputs.target_product || 'oppo6765' }}" -j"$(nproc)" dtbs
           find out/arch/arm64/boot/dts -name '*.dtb' | sort | head -40
 
       - name: Show kernel release
