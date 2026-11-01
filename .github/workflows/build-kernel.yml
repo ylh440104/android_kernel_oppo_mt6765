@@ -42,6 +42,7 @@ env:
     CLANG_TRIPLE=aarch64-linux-gnu-
     CROSS_COMPILE=aarch64-linux-androidkernel-
     CROSS_COMPILE_ARM32=arm-linux-androideabi-
+    TARGET_PRODUCT=oppo6765
 
 jobs:
   build:
@@ -79,6 +80,8 @@ jobs:
           mkdir -p android
           ln -sfn ../vendor android/vendor
 
+          ln -sfn kernel kernel-4.19
+
           test -f helper/fs/exfat/Kconfig
           test -f helper/fs/sdcardfs/Makefile
 
@@ -93,7 +96,6 @@ jobs:
 
           SECCOM_DIR="$ROOT/vendor/oplus/secure/common/bsp/drivers/oppo_secure_common"
           sed -i 's|^obj-y     +=  oppo_secure_common.o|ccflags-y += -I$(srctree)/drivers/misc/mediatek/masp/asfv2/asf_inc\nccflags-y += -I$(srctree)/drivers/misc/mediatek/masp/asfv2/asf_export_inc\nccflags-y += -I$(srctree)/drivers/misc/mediatek/masp/asfv2/module\nobj-y     +=  oppo_secure_common.o|' "$SECCOM_DIR/Makefile"
-          tail -8 "$SECCOM_DIR/Makefile"
 
           echo "---- dangling symlinks ----"
           find "$ROOT/kernel" -xtype l | sort || true
@@ -155,21 +157,21 @@ jobs:
           set -euo pipefail
           DEFCONFIG="${{ github.event.inputs.defconfig }}"
           if [ -z "$DEFCONFIG" ]; then DEFCONFIG="oppo6765_defconfig"; fi
-          make O=out $MAKE_ARGS TARGET_PRODUCT="${{ github.event.inputs.target_product || 'oppo6765' }}" "$DEFCONFIG"
+          make O=out $MAKE_ARGS "$DEFCONFIG"
           grep -E '^CONFIG_(BUILD_ARM64|MTK_PLATFORM|ARCH_MTK_PROJECT|EXFAT)' out/.config || true
 
       - name: Build kernel image
         working-directory: kernel
         run: |
           set -euo pipefail
-          make O=out $MAKE_ARGS TARGET_PRODUCT="${{ github.event.inputs.target_product || 'oppo6765' }}" -j"$(nproc)" Image.gz
+          make O=out $MAKE_ARGS -j"$(nproc)" Image.gz
           ls -lh out/arch/arm64/boot/Image.gz out/arch/arm64/boot/Image
 
       - name: Build device trees
         working-directory: kernel
         run: |
           set -euo pipefail
-          make O=out $MAKE_ARGS TARGET_PRODUCT="${{ github.event.inputs.target_product || 'oppo6765' }}" -j"$(nproc)" dtbs
+          make O=out $MAKE_ARGS -j"$(nproc)" dtbs
           find out/arch/arm64/boot/dts -name '*.dtb' | sort | head -40
 
       - name: Show kernel release
