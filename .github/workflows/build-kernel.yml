@@ -44,7 +44,7 @@ jobs:
             ${{ runner.temp }}/tc/clang
             ${{ runner.temp }}/tc/gcc64
             ${{ runner.temp }}/tc/gcc32
-          key: tc-clang-r383902-gcc49-lineage19.1-v2
+          key: tc-clang-r383902-gcc49-lineage19.1-v3
 
       - name: Download toolchains
         if: steps.tccache.outputs.cache-hit != 'true'
@@ -57,18 +57,14 @@ jobs:
           git clone --depth=1 -b lineage-19.1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git gcc32
           rm -rf clang/.git gcc64/.git gcc32/.git
 
-      - name: Register cross compiler aliases
+      - name: Register aarch64-linux-gnu aliases
         run: |
           set -euo pipefail
-          cd "$RUNNER_TEMP/tc"
-          chmod -R u+w gcc64 gcc32 clang || true
-          for f in gcc64/bin/aarch64-linux-android-*; do
-            [ -f "$f" ] || continue
-            [ -L "$f" ] && continue
-            base="$(basename "$f")"
-            suffix="${base#aarch64-linux-android-}"
-            ln -sf "$base" "gcc64/bin/aarch64-linux-androidkernel-$suffix"
-            ln -sf "$base" "gcc64/bin/aarch64-linux-gnu-$suffix"
+          cd "$RUNNER_TEMP/tc/gcc64/bin"
+          for t in as ld nm objcopy objdump readelf strip ar cpp; do
+            if [ -e "aarch64-linux-android-$t" ]; then
+              ln -sf "aarch64-linux-android-$t" "aarch64-linux-gnu-$t"
+            fi
           done
           echo "$RUNNER_TEMP/tc/clang/bin" >> "$GITHUB_PATH"
           echo "$RUNNER_TEMP/tc/gcc64/bin" >> "$GITHUB_PATH"
